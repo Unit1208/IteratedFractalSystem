@@ -17,8 +17,6 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
 const controls = new OrbitControls(camera, renderer.domElement);
-// controls.enableDamping=true;
-// controls.dampingFactor=0.05;
 controls.screenSpacePanning = true;
 
 const timer = new Timer();
@@ -41,12 +39,12 @@ class Attributes {
         matrix.decompose(this.translation, this.rotation, this.scale);
     }
 }
-
+let point_count = 150_000;
 let currentAttributes: Attributes[] = [];
 const geometry = new THREE.BufferGeometry();
-let vertices = createVertices(100_000);
+let vertices = createVertices(point_count);
 geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3))
-const colors = new Float32Array(100_000 * 3); // RGB for each vertex
+const colors = new Float32Array(point_count * 3); // RGB for each vertex
 geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 // Create a material that uses vertex colors
 const material = new THREE.PointsMaterial({
@@ -103,7 +101,9 @@ function startInterpolation() {
     endTime = startTime + 5;
 
 }
-
+function easeInOutCubic(x: number): number {
+    return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+}
 function updateInterpolation() {
     const elapsedTime = timer.getElapsed();
     if (elapsedTime <= startTime) {
@@ -112,7 +112,7 @@ function updateInterpolation() {
         startInterpolation()
     } else {
 
-        const t = smootherstep(mapLinear(elapsedTime, startTime, endTime, 0, 1), 0, 1);
+        const t = easeInOutCubic(mapLinear(elapsedTime, startTime, endTime, 0, 1));
         currentAttributes = oldAttributes.map((oldAttr, i) => {
             const newAttr = newAttributes[i];
             return new Attributes(
