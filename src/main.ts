@@ -1,167 +1,178 @@
-import './style.css'
+import './style.css';
 import * as THREE from 'three';
 import Stats from 'three/addons/libs/stats.module.js';
 import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
 import { Timer } from 'three/addons/misc/Timer.js';
 import { mapLinear } from 'three/src/math/MathUtils.js';
+
 const scene = new THREE.Scene();
 const aspect = window.innerWidth / window.innerHeight;
-const camera = new THREE.OrthographicCamera(
-    -aspect, aspect, 1, -1, 0.1, 10
-);
+const camera = new THREE.OrthographicCamera(-aspect, aspect, 1, -1, 0.1, 10);
 camera.position.set(0, 0, 5);
 camera.lookAt(0, 0, 0);
 
 const renderer = new THREE.WebGLRenderer();
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setAnimationLoop(animate)
 document.body.appendChild(renderer.domElement);
+
 const timer = new Timer();
 const api = {
     matrixCount: 3,
     pointCount: 10000,
     shuffleAttributes: startInterpolation,
-}
+};
+
 class Attributes {
-
-
-    constructor(
-        public rotation: THREE.Quaternion,
-        public scale: THREE.Vector3,
-        public translation: THREE.Vector3,
-    ) {
-
+    rotation: THREE.Quaternion;
+    scale: THREE.Vector3;
+    translation: THREE.Vector3;
+    constructor(rotation: THREE.Quaternion, scale: THREE.Vector3, translation: THREE.Vector3) {
+        this.rotation = rotation;
+        this.scale = scale;
+        this.translation = translation;
     }
 
-    public get matrix4(): THREE.Matrix4 {
-        return new THREE.Matrix4().compose(
-            this.translation, this.rotation, this.scale
-        )
-
-    }
-    public set matrix4(v: THREE.Matrix4) {
-        v.decompose(this.translation, this.rotation, this.scale)
+    get matrix4() {
+        return new THREE.Matrix4().compose(this.translation, this.rotation, this.scale);
     }
 
+    set matrix4(matrix) {
+        matrix.decompose(this.translation, this.rotation, this.scale);
+    }
 }
-window.addEventListener("load", () => {
-    init();
-    animate();
-});
 
-let currentAttributes: Attributes[] = []
-let rand_range = (min: number = 0, max: number = 1) => Math.random() * (max - min) + min
+let currentAttributes: Attributes[] = [];
 const geometry = new THREE.BufferGeometry();
-let vertices = new Float32Array(api.pointCount * 3);
-vertices = vertices.map(() => rand_range(-1, 1))
+let vertices = createVertices(api.pointCount);
 geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
 const points = new THREE.Points(geometry);
 scene.add(points);
-function setMatrixes() {
-    currentAttributes.forEach(_ => {
-        currentAttributes.pop()
-    });
-    currentAttributes = create_attributes()
-}
-let old_attributes: Attributes[];
-let new_attributes: Attributes[];
-function create_attributes() {
-    let n: Attributes[] = []
-    for (let i = 0; i < api.matrixCount; i++) {
-        let rotation = new THREE.Quaternion(rand_range(), rand_range(), rand_range(), rand_range());
-        rotation=rotation.normalize()
-        let scale = new THREE.Vector3(rand_range(0.1, 1), rand_range(0.1, 1), rand_range(0.1, 1));
-        let translation = new THREE.Vector3(rand_range(-1, 1), rand_range(-1, 1), rand_range(-1, 1));
 
+let oldAttributes: Attributes[] = [];
+let newAttributes: Attributes[] = [];
+let startTime = 0;
+let endTime = 0;
 
-        let attribute: Attributes = new Attributes(
-            rotation, scale, translation
-        )
-        n.push(attribute);
+let stats: Stats;
+let guiInitialized = false;
+
+function createVertices(pointCount: number) {
+    const vertices = new Float32Array(pointCount * 3);
+    for (let i = 0; i < vertices.length; i++) {
+        vertices[i] = Math.random() * 2 - 1;
     }
-    return n
+    return vertices;
 }
-let startTime: number;
-let endTime: number;
+
+function createAttributes(matrixCount: number) {
+    const attributes = [];
+    for (let i = 0; i < matrixCount; i++) {
+        const rotation = new THREE.Quaternion(
+            Math.random(),
+            Math.random(),
+            Math.random(),
+            Math.random()
+        ).normalize();
+        const scale = new THREE.Vector3(
+            Math.random() * 0.9 + 0.1,
+            Math.random() * 0.9 + 0.1,
+            Math.random() * 0.9 + 0.1
+        );
+        const translation = new THREE.Vector3(
+            Math.random() * 2 - 1,
+            Math.random() * 2 - 1,
+            Math.random() * 2 - 1
+        );
+        attributes.push(new Attributes(rotation, scale, translation));
+    }
+    return attributes;
+}
+
 function startInterpolation() {
-    old_attributes = structuredClone(currentAttributes);
-    new_attributes = create_attributes();
+    oldAttributes = [...currentAttributes];
+    newAttributes = createAttributes(api.matrixCount);
     startTime = timer.getElapsed();
-    endTime = timer.getElapsed() + 5;
+    endTime = startTime + 5;
 }
+
 function updateInterpolation() {
-    if (timer.getElapsed() < startTime) {
-        currentAttributes = old_attributes;
-    } else if (timer.getElapsed() > endTime) {
-        currentAttributes = new_attributes;
+    const elapsedTime = timer.getElapsed();
+    if (elapsedTime <= startTime) {
+        currentAttributes = [...oldAttributes];
+    } else if (elapsedTime >= endTime) {
+        currentAttributes = [...newAttributes];
     } else {
-        let t = mapLinear(timer.getElapsed(), startTime, endTime, 0, 1);
-        for (let i = 0; i < currentAttributes.length; i++) {
-            let currentAttribute = currentAttributes[i];
-            let new_attribute = new_attributes[i];
-            let old_attribute = old_attributes[i];
-            currentAttribute.rotation = new THREE.Quaternion().slerpQuaternions(old_attribute.rotation, new_attribute.rotation, t).normalize();
-            currentAttribute.scale = new THREE.Vector3().lerpVectors(old_attribute.scale, new_attribute.scale, t)
-            currentAttribute.translation = new THREE.Vector3().lerpVectors(old_attribute.translation, new_attribute.translation, t)
-            currentAttributes[i] = currentAttribute;
+        const t = mapLinear(elapsedTime, startTime, endTime, 0, 1);
+        currentAttributes = oldAttributes.map((oldAttr, i) => {
+            const newAttr = newAttributes[i];
+            return new Attributes(
+                new THREE.Quaternion().slerpQuaternions(oldAttr.rotation, newAttr.rotation, t),
+                oldAttr.scale.clone().lerp(newAttr.scale, t),
+                oldAttr.translation.clone().lerp(newAttr.translation, t)
+            );
+        });
+    }
+}
+
+function updateVertices() {
+    for (let i = 0; i < vertices.length; i += 3) {
+        const point = new THREE.Vector3(vertices[i], vertices[i + 1], vertices[i + 2]);
+        const attributes = currentAttributes[Math.floor(Math.random() * api.matrixCount)];
+        point.applyMatrix4(attributes.matrix4);
+
+        if (!point.toArray().some(isNaN)) {
+            vertices.set(point.toArray(), i);
+        } else {
+            console.error(`NaN detected at vertex index ${i}`);
+            vertices.set([0, 0, 0], i); // Fallback to default
         }
     }
+    geometry.attributes.position.needsUpdate = true;
 }
-let stats: Stats;
-let initialized = false;
-function init() {
-    if (!initialized) {
-        currentAttributes = create_attributes()
-        startInterpolation()
-        let gui = new GUI();
-        gui.add(api, 'pointCount', 1, 100000).onChange(() => {
-            vertices = new Float32Array(api.pointCount * 3).map(() => rand_range(-1, 1));
-            geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
-            geometry.attributes.position.needsUpdate = true;
 
-        });
-        
-        gui.add(api, 'matrixCount', 2, 5).onChange(() => {
-            setMatrixes();
-        })
-        gui.add(api, 'shuffleAttributes')
-        stats = new Stats();
-        document.body.appendChild(stats.dom)
-        initialized = true;
-    }
-}
-function validateVertices(vertices:Float32Array) {
+function validateVertices(vertices: Float32Array) {
     for (let i = 0; i < vertices.length; i++) {
         if (isNaN(vertices[i])) {
-            console.error(`Invalid vertex data at index ${i}`);
-            vertices[i] = 0; // Fallback to a default value
+            console.warn(`Invalid vertex data at index ${i}`);
+            vertices[i] = 0;
         }
     }
 }
-function animate() {
-    init()
-    stats.update();
-        timer.update();
-        updateInterpolation();
-    
-        for (let index = 0; index < vertices.length; index += 3) {
-            const point = new THREE.Vector3(...vertices.slice(index, index + 3));
-            let attributes = currentAttributes[Math.floor(rand_range(0, api.matrixCount))];
-            point.applyMatrix4(attributes.matrix4);
-    
-            // Validate and update the vertex
-            if (!point.toArray().some(isNaN)) {
-                vertices.set(point.toArray(), index);
-            } else {
-                console.error(`NaN detected at index ${index}`);
-                vertices.set([0, 0, 0], index); // Default fallback
-            }
-        }
-    
-        validateVertices(vertices);
-        geometry.attributes.position.needsUpdate = true;
-    
-        renderer.render(scene, camera);
-        requestAnimationFrame(animate);
-    
+
+function init() {
+    if (!guiInitialized) {
+        currentAttributes = createAttributes(api.matrixCount);
+        startInterpolation();
+
+        const gui = new GUI();
+        gui.add(api, 'pointCount', 1, 100000, 1).onChange(() => {
+            vertices = createVertices(api.pointCount);
+            geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+        });
+
+        gui.add(api, 'matrixCount', 2, 5, 1).onChange(() => {
+            currentAttributes = createAttributes(api.matrixCount);
+        });
+
+        gui.add(api, 'shuffleAttributes');
+        stats = new Stats();
+        document.body.appendChild(stats.dom);
+
+        guiInitialized = true;
+    }
 }
+
+function animate() {
+    init();
+    stats.update();
+    timer.update();
+    updateInterpolation();
+    updateVertices();
+    validateVertices(vertices);
+    renderer.render(scene, camera);
+    requestAnimationFrame(animate);
+}
+
+// Initialize and start animation
+init();
+animate();
