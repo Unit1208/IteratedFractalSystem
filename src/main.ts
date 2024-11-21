@@ -45,7 +45,7 @@ class Attributes {
 let currentAttributes: Attributes[] = [];
 const geometry = new THREE.BufferGeometry();
 let vertices = createVertices(100_000);
-geometry.setAttribute('position',new THREE.BufferAttribute(vertices,3))
+geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3))
 const colors = new Float32Array(100_000 * 3); // RGB for each vertex
 geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 // Create a material that uses vertex colors
@@ -53,7 +53,7 @@ const material = new THREE.PointsMaterial({
     vertexColors: true, // Enable per-vertex coloring
 });
 
-const points = new THREE.Points(geometry,material);
+const points = new THREE.Points(geometry, material);
 scene.add(points);
 
 let oldAttributes: Attributes[] = [];
@@ -125,8 +125,8 @@ function updateInterpolation() {
 }
 
 function updateVertices() {
-    function computeMatrices(attributes:Attributes[]) {
-        return attributes.map(attr=> attr.matrix4.clone());
+    function computeMatrices(attributes: Attributes[]) {
+        return attributes.map(attr => attr.matrix4.clone());
     }
 
     const matrices = computeMatrices(currentAttributes);
@@ -135,27 +135,19 @@ function updateVertices() {
         const point = new THREE.Vector3(vertices[i], vertices[i + 1], vertices[i + 2]);
         const matrix_index = Math.floor(Math.random() * matrices.length);
         const matrix = matrices[matrix_index];
-        const new_matrix=new_matrices[matrix_index]
+        const new_matrix = new_matrices[matrix_index]
         point.applyMatrix4(matrix);
-        let new_point=point.clone().applyMatrix4(new_matrix);
+        let new_point = point.clone().applyMatrix4(new_matrix);
 
-        if (!point.toArray().some(isNaN)) {
-            vertices.set(point.toArray(), i);
+        vertices.set(point.toArray(), i);
 
-            // Compute distance from original position
-            const distance = point.distanceTo(new_point);
+        // Compute distance from original position
+        const distance = point.distanceTo(new_point);
 
-            // Map the distance to a color gradient (e.g., blue to red)
-            const color = new THREE.Color();
-            color.setHSL(0.66 - 0.66 * distance / 2, 1, 0.5); // Blue (small distance) to Red (large distance)
-            colors.set(color.toArray(), i);
-            debugger;
-
-        } else {
-            console.error(`NaN detected at vertex index ${i}`);
-            vertices.set([0, 0, 0], i); // Fallback to default
-            colors.set([1, 1, 1], i); // Default white
-        }
+        // Map the distance to a color gradient (e.g., blue to red)
+        const color = new THREE.Color();
+        color.setHSL(0.66 - 0.66 * distance / 2, 1, 0.5); // Blue (small distance) to Red (large distance)
+        colors.set(color.toArray(), i);
     }
 
     geometry.attributes.position.needsUpdate = true;
