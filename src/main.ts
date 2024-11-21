@@ -11,7 +11,9 @@ const aspect = window.innerWidth / window.innerHeight;
 const camera = new THREE.OrthographicCamera(-aspect, aspect, 1, -1, 0.1, 10);
 camera.position.set(0, 0, 5);
 camera.lookAt(0, 0, 0);
-const renderer = new THREE.WebGLRenderer();
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(window.devicePixelRatio);
+
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
@@ -22,7 +24,7 @@ controls.screenSpacePanning = true;
 
 const timer = new Timer();
 const api = {
-    pointCount: 10000,
+    pointCount: 100000,
     shuffleAttributes: startInterpolation,
 };
 
@@ -150,7 +152,7 @@ function init() {
         startInterpolation();
 
         const gui = new GUI();
-        gui.add(api, 'pointCount', 1, 100000, 1).onChange(() => {
+        gui.add(api, 'pointCount', 10000, 250000, 1).onChange(() => {
             vertices = createVertices(api.pointCount);
             geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
         });
