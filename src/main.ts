@@ -4,7 +4,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import Stats from 'three/addons/libs/stats.module.js';
 import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
 import { Timer } from 'three/addons/misc/Timer.js';
-import { mapLinear } from 'three/src/math/MathUtils.js';
+import { mapLinear, smootherstep, smoothstep } from 'three/src/math/MathUtils.js';
 
 const scene = new THREE.Scene();
 const aspect = window.innerWidth / window.innerHeight;
@@ -15,10 +15,10 @@ const renderer = new THREE.WebGLRenderer();
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
-const controls=new OrbitControls(camera,renderer.domElement);
+const controls = new OrbitControls(camera, renderer.domElement);
 // controls.enableDamping=true;
 // controls.dampingFactor=0.05;
-controls.screenSpacePanning=true;
+controls.screenSpacePanning = true;
 
 const timer = new Timer();
 const api = {
@@ -106,7 +106,8 @@ function updateInterpolation() {
     } else if (elapsedTime >= endTime) {
         startInterpolation()
     } else {
-        const t = mapLinear(elapsedTime, startTime, endTime, 0, 1);
+
+        const t = smootherstep(mapLinear(elapsedTime, startTime, endTime, 0, 1), 0, 1);
         currentAttributes = oldAttributes.map((oldAttr, i) => {
             const newAttr = newAttributes[i];
             return new Attributes(
@@ -119,10 +120,16 @@ function updateInterpolation() {
 }
 
 function updateVertices() {
+    function computeMatrices(attributes: Attributes[]) {
+        return attributes.map(attr => attr.matrix4.clone());
+    }
+
+    let matrices = computeMatrices(currentAttributes);
+
     for (let i = 0; i < vertices.length; i += 3) {
         const point = new THREE.Vector3(vertices[i], vertices[i + 1], vertices[i + 2]);
-        const attributes = currentAttributes[Math.floor(Math.random() *3)];
-        point.applyMatrix4(attributes.matrix4);
+        const matrix = matrices[Math.floor(Math.random() * matrices.length)];
+        point.applyMatrix4(matrix);
 
         if (!point.toArray().some(isNaN)) {
             vertices.set(point.toArray(), i);
@@ -132,16 +139,10 @@ function updateVertices() {
         }
     }
     geometry.attributes.position.needsUpdate = true;
+
 }
 
-function validateVertices(vertices: Float32Array) {
-    for (let i = 0; i < vertices.length; i++) {
-        if (isNaN(vertices[i])) {
-            console.warn(`Invalid vertex data at index ${i}`);
-            vertices[i] = 0;
-        }
-    }
-}
+
 
 function init() {
     if (!guiInitialized) {
@@ -156,18 +157,17 @@ function init() {
 
 
 
-        gui.add(api, 'shuffleAttributes');
         stats = new Stats();
         document.body.appendChild(stats.dom);
 
         guiInitialized = true;
-        window.addEventListener('resize',onWindowResize)
+        window.addEventListener('resize', onWindowResize)
     }
 }
-function onWindowResize(){
+function onWindowResize() {
     camera.updateProjectionMatrix();
 
-    renderer.setSize( window.innerWidth, window.innerHeight );
+    renderer.setSize(window.innerWidth, window.innerHeight);
 
 }
 
@@ -178,7 +178,6 @@ function animate() {
     controls.update();
     updateInterpolation();
     updateVertices();
-    validateVertices(vertices);
     renderer.render(scene, camera);
     requestAnimationFrame(animate);
 }
