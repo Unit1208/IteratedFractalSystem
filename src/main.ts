@@ -1,5 +1,6 @@
 import './style.css';
 import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import Stats from 'three/addons/libs/stats.module.js';
 import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
 import { Timer } from 'three/addons/misc/Timer.js';
@@ -10,14 +11,17 @@ const aspect = window.innerWidth / window.innerHeight;
 const camera = new THREE.OrthographicCamera(-aspect, aspect, 1, -1, 0.1, 10);
 camera.position.set(0, 0, 5);
 camera.lookAt(0, 0, 0);
-
 const renderer = new THREE.WebGLRenderer();
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
+const controls=new OrbitControls(camera,renderer.domElement);
+// controls.enableDamping=true;
+// controls.dampingFactor=0.05;
+controls.screenSpacePanning=true;
+
 const timer = new Timer();
 const api = {
-    matrixCount: 3,
     pointCount: 10000,
     shuffleAttributes: startInterpolation,
 };
@@ -90,7 +94,7 @@ function createAttributes(matrixCount: number) {
 
 function startInterpolation() {
     oldAttributes = [...currentAttributes];
-    newAttributes = createAttributes(api.matrixCount);
+    newAttributes = createAttributes(3);
     startTime = timer.getElapsed();
     endTime = startTime + 5;
 }
@@ -100,7 +104,7 @@ function updateInterpolation() {
     if (elapsedTime <= startTime) {
         currentAttributes = [...oldAttributes];
     } else if (elapsedTime >= endTime) {
-        currentAttributes = [...newAttributes];
+        startInterpolation()
     } else {
         const t = mapLinear(elapsedTime, startTime, endTime, 0, 1);
         currentAttributes = oldAttributes.map((oldAttr, i) => {
@@ -117,7 +121,7 @@ function updateInterpolation() {
 function updateVertices() {
     for (let i = 0; i < vertices.length; i += 3) {
         const point = new THREE.Vector3(vertices[i], vertices[i + 1], vertices[i + 2]);
-        const attributes = currentAttributes[Math.floor(Math.random() * api.matrixCount)];
+        const attributes = currentAttributes[Math.floor(Math.random() *3)];
         point.applyMatrix4(attributes.matrix4);
 
         if (!point.toArray().some(isNaN)) {
@@ -141,7 +145,7 @@ function validateVertices(vertices: Float32Array) {
 
 function init() {
     if (!guiInitialized) {
-        currentAttributes = createAttributes(api.matrixCount);
+        currentAttributes = createAttributes(3);
         startInterpolation();
 
         const gui = new GUI();
@@ -150,22 +154,28 @@ function init() {
             geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
         });
 
-        gui.add(api, 'matrixCount', 2, 5, 1).onChange(() => {
-            currentAttributes = createAttributes(api.matrixCount);
-        });
+
 
         gui.add(api, 'shuffleAttributes');
         stats = new Stats();
         document.body.appendChild(stats.dom);
 
         guiInitialized = true;
+        window.addEventListener('resize',onWindowResize)
     }
+}
+function onWindowResize(){
+    camera.updateProjectionMatrix();
+
+    renderer.setSize( window.innerWidth, window.innerHeight );
+
 }
 
 function animate() {
     init();
     stats.update();
     timer.update();
+    controls.update();
     updateInterpolation();
     updateVertices();
     validateVertices(vertices);
