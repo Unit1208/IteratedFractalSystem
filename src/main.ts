@@ -1,9 +1,10 @@
 import './style.css';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
 import Stats from 'three/addons/libs/stats.module.js';
 import { Timer } from 'three/addons/misc/Timer.js';
-import { mapLinear, smootherstep, smoothstep } from 'three/src/math/MathUtils.js';
+import { mapLinear } from 'three/src/math/MathUtils.js';
 
 const scene = new THREE.Scene();
 const aspect = window.innerWidth / window.innerHeight;
@@ -12,7 +13,6 @@ camera.position.set(0, 0, 5);
 camera.lookAt(0, 0, 0);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(window.devicePixelRatio);
-
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
@@ -39,14 +39,18 @@ class Attributes {
         matrix.decompose(this.translation, this.rotation, this.scale);
     }
 }
-let point_count = 250_000;
+const api = {
+    pointCount: 100_000,
+};
 let currentAttributes: Attributes[] = [];
+let oldAttributes: Attributes[] = [];
+let newAttributes: Attributes[] = [];
 const geometry = new THREE.BufferGeometry();
-let vertices = createVertices(point_count);
-geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3))
-const colors = new Float32Array(point_count * 3); // RGB for each vertex
+let vertices = createVertices(api.pointCount);
+geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+const colors = new Float32Array(api.pointCount * 3); // RGB for each vertex
 geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-// Create a material that uses vertex colors
+
 const material = new THREE.PointsMaterial({
     vertexColors: true, // Enable per-vertex coloring
 });
@@ -54,8 +58,6 @@ const material = new THREE.PointsMaterial({
 const points = new THREE.Points(geometry, material);
 scene.add(points);
 
-let oldAttributes: Attributes[] = [];
-let newAttributes: Attributes[] = [];
 let startTime = 0;
 let endTime = 0;
 
@@ -95,84 +97,91 @@ function createAttributes(matrixCount: number) {
 }
 
 function startInterpolation() {
-    oldAttributes = [...currentAttributes];
+    oldAttributes = currentAttributes.slice();
     newAttributes = createAttributes(3);
     startTime = timer.getElapsed();
     endTime = startTime + 5;
-
 }
+
 function easeInOutCubic(x: number): number {
     return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
 }
+
 function updateInterpolation() {
     const elapsedTime = timer.getElapsed();
-    if (elapsedTime <= startTime) {
-        currentAttributes = [...oldAttributes];
-    } else if (elapsedTime >= endTime) {
-        startInterpolation()
+    if (elapsedTime >= endTime) {
+        startInterpolation();
     } else {
-
         const t = easeInOutCubic(mapLinear(elapsedTime, startTime, endTime, 0, 1));
-        currentAttributes = oldAttributes.map((oldAttr, i) => {
+        for (let i = 0; i < currentAttributes.length; i++) {
+            const oldAttr = oldAttributes[i];
             const newAttr = newAttributes[i];
-            return new Attributes(
-                new THREE.Quaternion().slerpQuaternions(oldAttr.rotation, newAttr.rotation, t),
-                oldAttr.scale.clone().lerp(newAttr.scale, t),
-                oldAttr.translation.clone().lerp(newAttr.translation, t)
-            );
-        });
+            const rotation = oldAttr.rotation.clone().slerp(newAttr.rotation, t);
+            const scale = oldAttr.scale.clone().lerp(newAttr.scale, t);
+            const translation = oldAttr.translation.clone().lerp(newAttr.translation, t);
+            currentAttributes[i] = new Attributes(rotation, scale, translation);
+        }
     }
 }
 
 function updateVertices() {
-    function computeMatrices(attributes: Attributes[]) {
-        return attributes.map(attr => attr.matrix4.clone());
-    }
+    const matrices = currentAttributes.map(attr => attr.matrix4);
+    const newMatrices = newAttributes.map(attr => attr.matrix4);
 
-    const matrices = computeMatrices(currentAttributes);
-    const new_matrices = computeMatrices(newAttributes);
+    const positionAttr = geometry.attributes.position;
+    const colorAttr = geometry.attributes.color;
+
+    const positionArray = positionAttr.array;
+    const colorArray = colorAttr.array;
+
     for (let i = 0; i < vertices.length; i += 3) {
-        const point = new THREE.Vector3(vertices[i], vertices[i + 1], vertices[i + 2]);
-        const matrix_index = Math.floor(Math.random() * matrices.length);
-        const matrix = matrices[matrix_index];
-        const new_matrix = new_matrices[matrix_index]
-        point.applyMatrix4(matrix);
-        let new_point = point.clone().applyMatrix4(new_matrix);
+        const point = new THREE.Vector3(positionArray[i], positionArray[i + 1], positionArray[i + 2]);
+        const matrixIndex = Math.floor(Math.random() * matrices.length);
+        const matrix = matrices[matrixIndex];
+        const newMatrix = newMatrices[matrixIndex];
 
-        vertices.set(point.toArray(), i);
+        point.applyMatrix4(matrix);
+        let newPoint = point.clone().applyMatrix4(newMatrix);
+
+        positionArray.set(point.toArray(), i);
 
         // Compute distance from original position
-        const distance = point.distanceTo(new_point);
+        const distance = point.distanceTo(newPoint);
 
-        // Map the distance to a color gradient (e.g., blue to red)
+        // Map the distance to a color gradient (blue to red)
         const color = new THREE.Color();
         color.setHSL(0.66 - 0.66 * distance / 2, 1, 0.5); // Blue (small distance) to Red (large distance)
-        colors.set(color.toArray(), i);
+        colorArray.set(color.toArray(), i);
     }
 
-    geometry.attributes.position.needsUpdate = true;
-    geometry.attributes.color.needsUpdate = true;
+    positionAttr.needsUpdate = true;
+    colorAttr.needsUpdate = true;
 }
-
-
-
 
 function init() {
     if (!guiInitialized) {
         currentAttributes = createAttributes(3);
+        const gui = new GUI();
+        gui.add(api, 'pointCount', 10_000, 500_000, 1).onChange(() => {
+            let vertices = createVertices(api.pointCount);
+            geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+            const colors = new Float32Array(api.pointCount * 3); // RGB for each vertex
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+        });
         startInterpolation();
         stats = new Stats();
         document.body.appendChild(stats.dom);
-
         guiInitialized = true;
-        window.addEventListener('resize', onWindowResize)
+        window.addEventListener('resize', onWindowResize);
     }
 }
+
 function onWindowResize() {
+    const aspectRatio = window.innerWidth / window.innerHeight;
+    camera.left = -aspectRatio;
+    camera.right = aspectRatio;
     camera.updateProjectionMatrix();
-
     renderer.setSize(window.innerWidth, window.innerHeight);
-
 }
 
 function animate() {
