@@ -39,7 +39,7 @@ class Attributes {
         matrix.decompose(this.translation, this.rotation, this.scale);
     }
 }
-let point_count = 150_000;
+let point_count = 250_000;
 let currentAttributes: Attributes[] = [];
 const geometry = new THREE.BufferGeometry();
 let vertices = createVertices(point_count);
