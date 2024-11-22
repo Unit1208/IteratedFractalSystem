@@ -8,7 +8,7 @@ import { mapLinear } from 'three/src/math/MathUtils.js';
 
 const scene = new THREE.Scene();
 const aspect = window.innerWidth / window.innerHeight;
-const camera = new THREE.OrthographicCamera(-aspect, aspect, 1, -1, 0.1, 10);
+const camera = new THREE.OrthographicCamera(-aspect, aspect, 1, -1, 0.01, 100);
 camera.position.set(0, 0, 5);
 camera.lookAt(0, 0, 0);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
